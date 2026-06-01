@@ -59,8 +59,13 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
 
+    # Expose a typed global pointer so YAML lambdas can call
+    # dough_cv_component->capture_calibration() etc.
     cg.add_global(cg.RawExpression(
-        f"auto *dough_cv_component = id({config[CONF_ID]})"
+        f"::esphome::dough_cv::DoughCVComponent *dough_cv_component"
+    ))
+    cg.add(cg.RawExpression(
+        f"dough_cv_component = {var}"
     ))
 
     if CONF_RISE_HEIGHT in config:

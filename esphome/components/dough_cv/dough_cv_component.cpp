@@ -13,6 +13,7 @@ static const char *TAG = "dough_cv";
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 void DoughCVComponent::setup() {
+  pref_ = global_preferences->make_preference<CalData>(fnv1_hash("dough_cv_v1"));
   load_cal_();
 
   if (esp32_camera::global_esp32_camera == nullptr) {
@@ -51,15 +52,18 @@ void DoughCVComponent::on_frame_(std::shared_ptr<esp32_camera::CameraImage> img)
   if (!do_process && !do_calibrate) return;
 
   camera_fb_t *fb = img->get_raw_buffer();
-  if (!fb || fb->format != PIXFORMAT_RGB565) {
-    // ESPHome may deliver JPEG internally; if so, we can't do pixel ops.
-    // In that case the user should set jpeg_quality to a high number or
-    // add a format: RGB565 override when ESPHome exposes it.
-    ESP_LOGW(TAG, "Frame format is not RGB565 (%d) — cannot process", fb ? fb->format : -1);
+  if (!fb) return;
+
+  if (fb->format != PIXFORMAT_RGB565 && fb->format != PIXFORMAT_GRAYSCALE) {
+    // Driver is in JPEG mode — can't do pixel ops without a decoder.
+    // Set `single_buffer: true` and no `jpeg_quality` key in the YAML camera
+    // config, or add `format: grayscale` once ESPHome exposes it.
+    ESP_LOGW(TAG, "Frame format %d is not RGB565/GRAYSCALE — cannot process. "
+             "Remove jpeg_quality from esp32_camera config.", fb->format);
     return;
   }
 
-  auto dots = find_dots_((const uint8_t *)fb->buf, fb->width, fb->height);
+  auto dots = find_dots_((const uint8_t *)fb->buf, fb->width, fb->height, fb->format);
   ESP_LOGD(TAG, "%d dots found in %dx%d frame", (int)dots.size(), fb->width, fb->height);
 
   // ── Calibration capture ───────────────────────────────────────────────────
@@ -94,27 +98,27 @@ void DoughCVComponent::on_frame_(std::shared_ptr<esp32_camera::CameraImage> img)
 
 // ── Dot detection (red-channel threshold + BFS blob finder) ──────────────────
 
-std::vector<DotPos> DoughCVComponent::find_dots_(const uint8_t *buf, int w, int h) {
+std::vector<DotPos> DoughCVComponent::find_dots_(const uint8_t *buf, int w, int h,
+                                                   pixformat_t fmt) {
   std::vector<bool> vis(w * h, false);
   std::vector<DotPos> dots;
   dots.reserve(MAX_DOTS);
 
-  // Extract R and G from big-endian RGB565 word
-  auto px_r = [&](int x, int y) -> uint8_t {
-    int i = (y * w + x) * 2;
-    uint16_t p = ((uint16_t)buf[i] << 8) | buf[i + 1];
-    return (uint8_t)((p >> 11) << 3);   // 5-bit → 8-bit
-  };
-  auto px_g = [&](int x, int y) -> uint8_t {
-    int i = (y * w + x) * 2;
-    uint16_t p = ((uint16_t)buf[i] << 8) | buf[i + 1];
-    return (uint8_t)(((p >> 5) & 0x3F) << 2);  // 6-bit → 8-bit
-  };
+  const bool is_rgb565 = (fmt == PIXFORMAT_RGB565);
 
+  // For RGB565: check red channel dominates green (laser dot colour rejection).
+  // For grayscale: simple brightness threshold — no colour info available.
   auto is_dot = [&](int x, int y) -> bool {
-    uint8_t r = px_r(x, y);
-    uint8_t g = px_g(x, y);
-    return r >= dot_threshold_ && r > (uint8_t)(g * 1.5f);
+    if (is_rgb565) {
+      int i = (y * w + x) * 2;
+      uint16_t p = ((uint16_t)buf[i] << 8) | buf[i + 1];
+      uint8_t r = (uint8_t)((p >> 11) << 3);
+      uint8_t g = (uint8_t)(((p >> 5) & 0x3F) << 2);
+      return r >= dot_threshold_ && r > (uint8_t)(g * 1.5f);
+    } else {
+      // Grayscale: assume ambient is dark and laser is bright
+      return buf[y * w + x] >= dot_threshold_;
+    }
   };
 
   // 1-pixel border excluded to avoid edge artefacts
@@ -242,7 +246,6 @@ void DoughCVComponent::clear_calibration() {
   calibrated_ = false;
   cal_dots_.clear();
   CalData empty{};
-  pref_ = global_preferences->make_preference<CalData>(fnv1_hash("dough_cv_v1"));
   pref_.save(&empty);
   ESP_LOGI(TAG, "Calibration cleared");
 }
@@ -251,13 +254,11 @@ void DoughCVComponent::save_cal_() {
   CalData d{};
   d.n = (uint8_t)std::min((int)cal_dots_.size(), MAX_DOTS);
   for (int i = 0; i < d.n; i++) { d.x[i] = cal_dots_[i].x; d.y[i] = cal_dots_[i].y; }
-  pref_ = global_preferences->make_preference<CalData>(fnv1_hash("dough_cv_v1"));
   pref_.save(&d);
   ESP_LOGD(TAG, "Calibration saved (%d dots)", d.n);
 }
 
 void DoughCVComponent::load_cal_() {
-  pref_ = global_preferences->make_preference<CalData>(fnv1_hash("dough_cv_v1"));
   CalData d{};
   if (pref_.load(&d) && d.n >= 3 && d.n <= MAX_DOTS) {
     cal_dots_.resize(d.n);

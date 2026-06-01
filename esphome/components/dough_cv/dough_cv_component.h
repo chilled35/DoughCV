@@ -51,7 +51,7 @@ class DoughCVComponent : public Component {
 
  private:
   void on_frame_(std::shared_ptr<esp32_camera::CameraImage> img);
-  std::vector<DotPos> find_dots_(const uint8_t *buf, int w, int h);
+  std::vector<DotPos> find_dots_(const uint8_t *buf, int w, int h, pixformat_t fmt);
   float rise_height_mm_(const std::vector<DotPos> &dots, int frame_w);
   float footprint_mm_  (const std::vector<DotPos> &dots, int frame_w);
   void  save_cal_();
