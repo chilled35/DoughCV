@@ -75,13 +75,62 @@ Dashboard (browser → ESP32 direct)
 
 ---
 
-## Setup
+## Firmware (PlatformIO — standalone, no ESPHome)
 
-### 1. Driver files (no external driver needed)
+For direct development/testing of the C++ firmware without ESPHome:
 
-Unlike the VL53L8CX project, this component uses only the ESP32 camera driver built into ESPHome. No external SDK required.
+### Build & flash
 
-### 2. ESPHome secrets
+```bash
+pip install platformio
+pio run -e xiao_esp32s3_sense --target upload
+pio device monitor
+```
+
+### Calibrate
+
+With the dough at its starting height, type `cal` in the serial monitor.
+Optionally provide the known height: `cal 0` (baseline) or `cal 50` (50 mm above reference).
+
+### Watch it rise
+
+Output every 500 ms:
+```
+[rise] 12.34 mm  (cy=44.21 peak=223 n=17)
+```
+
+### Tuning dot detection
+
+Increase `DETECT_THRESHOLD` (default 180) if ambient light causes false detections; decrease if the dot appears dim.  Live adjustment without reflashing: `thr 160`
+
+Use `dbg` in the serial monitor to get a 16×16 ASCII brightness map around the detected centroid:
+```
+[dbg] peak=224 count=14 valid=1 cx=47.83 cy=52.11 thr=180
+```
+
+### Geometry constants (requires reflash)
+
+Edit `platformio.ini` build flags:
+
+| Flag | Meaning | Default |
+|------|---------|---------|
+| `LASER_ANGLE_DEG` | Laser tilt from vertical | 30° |
+| `CAMERA_BASELINE_MM` | Horiz. dist. laser exit → camera | 30 mm |
+| `FOCAL_LENGTH_PX` | Camera focal length at 96×96 | 88 px |
+
+### Running native unit tests (no hardware)
+
+```bash
+pio test -e native_test
+```
+
+Tests cover dot centroid accuracy (< 0.5 px error on synthetic Gaussian dot), threshold behaviour, spurious-dot rejection, and triangulation math.
+
+---
+
+## ESPHome setup
+
+### 1. ESPHome secrets
 
 Create `esphome/secrets.yaml` (gitignored):
 
@@ -93,21 +142,21 @@ api_encryption_key: "base64-key-here"  # generate with: openssl rand -base64 32
 ota_password: "your-ota-password"
 ```
 
-### 3. Flash
+### 2. Flash
 
 ```bash
 cd esphome
 esphome run dough_cv.yaml
 ```
 
-### 4. Calibration
+### 3. Calibration
 
 1. Place the empty proofing container under the sensor with no dough.
 2. Open the dashboard and confirm laser dots are visible in the camera feed.
 3. Press **Capture Calibration** — the flat-surface dot positions are saved to NVS.
 4. Place your dough and start monitoring.
 
-### 5. Dashboard
+### 4. Dashboard
 
 Copy `dashboard/` to your HA `/config/www/dough_cv/` and visit:
 `http://your-ha-ip/local/dough_cv/dough_cv_dashboard.html`
