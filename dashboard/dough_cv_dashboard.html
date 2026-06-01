@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DoughCV — Rise Monitor</title>
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+
+<header>
+  <h1>🫓 DoughCV</h1>
+  <div id="status-badge" class="badge unknown">Loading…</div>
+  <span id="cal-badge" class="badge unknown" title="Calibration status">Cal: --</span>
+  <button id="reset-btn" title="Change device URL">⚙</button>
+</header>
+
+<!-- URL setup panel -->
+<div id="connect-panel" class="hidden">
+  <label>ESPHome Device URL
+    <input type="text" id="device-url" placeholder="http://dough-cv.local" />
+  </label>
+  <button id="connect-btn">Connect</button>
+  <p class="hint">Enter your ESP32's IP or mDNS address. Saved to localStorage.</p>
+</div>
+
+<!-- Main dashboard -->
+<main id="dashboard" class="hidden">
+
+  <section id="controls">
+    <div class="ctrl-group">
+      <span class="label">Calibration</span>
+      <button id="cal-btn">Capture Baseline</button>
+      <button id="clear-cal-btn" class="danger">Clear</button>
+    </div>
+    <div class="ctrl-group">
+      <span class="label">Dots</span>
+      <strong id="dot-count-val" style="color:var(--accent)">--</strong>
+    </div>
+    <div class="ctrl-group">
+      <span class="label">Last update</span>
+      <span id="last-update" style="color:var(--muted);font-size:0.8rem">--</span>
+    </div>
+  </section>
+
+  <div id="viz-area">
+    <!-- Live camera feed (MJPEG stream from ESPHome web_server) -->
+    <div id="camera-wrap">
+      <img id="camera-feed" alt="Camera feed" />
+      <div id="camera-overlay">160 × 120 · OV2640</div>
+    </div>
+
+    <!-- Time-series charts -->
+    <div id="charts">
+      <div class="chart-panel">
+        <div class="chart-title">Rise Height (mm)</div>
+        <canvas id="chart-rise"></canvas>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-title">Footprint Diameter (mm)</div>
+        <canvas id="chart-foot"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <section id="stats">
+    <div class="stat"><span>Rise Height</span><strong id="stat-rise">--</strong> mm</div>
+    <div class="stat"><span>Footprint</span><strong id="stat-foot">--</strong> mm</div>
+    <div class="stat"><span>Dots Detected</span><strong id="stat-dots">--</strong></div>
+    <div class="stat"><span>Peak Rise</span><strong id="stat-peak">--</strong> mm</div>
+  </section>
+
+</main>
+
+<script type="module">
+import { ESPHomeSensor } from './js/esphome_sse.js';
+
+const KEY = 'doughcv_url';
+
+const statusBadge  = document.getElementById('status-badge');
+const calBadge     = document.getElementById('cal-badge');
+const connectPanel = document.getElementById('connect-panel');
+const dashboard    = document.getElementById('dashboard');
+const cameraFeed   = document.getElementById('camera-feed');
+
+// ── Time-series chart renderer ────────────────────────────────────────────────
+class LineChart {
+  constructor(canvas, colour, maxPoints = 120) {
+    this._cv     = canvas;
+    this._colour = colour;
+    this._max    = maxPoints;
+    this._data   = [];
+    this._peak   = 0;
+  }
+  push(v) {
+    this._data.push(v);
+    if (this._data.length > this._max) this._data.shift();
+    if (v > this._peak) this._peak = v;
+    this._draw();
+  }
+  get peak() { return this._peak; }
+  _draw() {
+    const cv = this._cv;
+    const w = cv.width  = cv.clientWidth  || 400;
+    const h = cv.height = cv.clientHeight || 120;
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+
+    if (this._data.length < 2) return;
+
+    const vMax = Math.max(...this._data, 1);
+    const vMin = 0;
+
+    // Grid lines
+    ctx.strokeStyle = 'rgba(42,42,74,0.8)';
+    ctx.lineWidth = 1;
+    for (let g = 0; g <= 4; g++) {
+      const y = h - (g / 4) * h;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      ctx.fillStyle = 'rgba(136,138,176,0.55)';
+      ctx.font = '10px monospace'; ctx.textAlign = 'left';
+      ctx.fillText(Math.round(vMin + (g / 4) * (vMax - vMin)), 4, y - 2);
+    }
+
+    // Fill
+    const step = w / (this._max - 1);
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    this._data.forEach((v, i) => {
+      const x = i * step;
+      const y = h - ((v - vMin) / (vMax - vMin)) * h;
+      ctx.lineTo(x, y);
+    });
+    ctx.lineTo((this._data.length - 1) * step, h);
+    ctx.closePath();
+    ctx.fillStyle = this._colour.replace(')', ', 0.15)').replace('rgb', 'rgba');
+    ctx.fill();
+
+    // Line
+    ctx.beginPath();
+    this._data.forEach((v, i) => {
+      const x = i * step;
+      const y = h - ((v - vMin) / (vMax - vMin)) * h;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = this._colour;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+const riseChart = new LineChart(document.getElementById('chart-rise'), 'rgb(0,212,255)');
+const footChart = new LineChart(document.getElementById('chart-foot'), 'rgb(0,230,118)');
+
+window.addEventListener('resize', () => { riseChart._draw(); footChart._draw(); });
+
+// ── URL setup ─────────────────────────────────────────────────────────────────
+statusBadge.textContent = 'Connecting…';
+statusBadge.className   = 'badge connecting';
+
+const savedUrl = localStorage.getItem(KEY);
+if (savedUrl) {
+  start(savedUrl);
+} else {
+  showPanel();
+}
+
+function showPanel() {
+  statusBadge.textContent = 'Setup needed';
+  statusBadge.className   = 'badge unknown';
+  connectPanel.classList.remove('hidden');
+  const input = document.getElementById('device-url');
+  if (localStorage.getItem(KEY)) input.value = localStorage.getItem(KEY);
+  document.getElementById('connect-btn').addEventListener('click', () => {
+    const url = input.value.trim();
+    if (!url) return;
+    localStorage.setItem(KEY, url);
+    connectPanel.classList.add('hidden');
+    start(url);
+  }, { once: true });
+}
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+  localStorage.removeItem(KEY); location.reload();
+});
+
+// ── ESPHome connection ────────────────────────────────────────────────────────
+function start(url) {
+  statusBadge.textContent = 'Connecting…';
+  statusBadge.className   = 'badge connecting';
+
+  // Point camera MJPEG stream at the device
+  cameraFeed.src = url.replace(/\/$/, '') + '/camera/stream';
+  cameraFeed.onerror = () => {
+    document.getElementById('camera-overlay').textContent = 'Camera stream unavailable';
+  };
+
+  const sse = new ESPHomeSensor(url);
+
+  sse.onConnect = () => {
+    statusBadge.textContent = 'Connected';
+    statusBadge.className   = 'badge connected';
+    connectPanel.classList.add('hidden');
+    dashboard.classList.remove('hidden');
+  };
+
+  sse.onDisconnect = () => {
+    statusBadge.textContent = 'Disconnected';
+    statusBadge.className   = 'badge disconnected';
+  };
+
+  sse.onState = (id, state) => {
+    const v = parseFloat(state);
+    const now = new Date().toLocaleTimeString();
+
+    if (id.includes('rise_height')) {
+      document.getElementById('stat-rise').textContent = isNaN(v) ? '--' : v.toFixed(1);
+      if (!isNaN(v)) riseChart.push(v);
+      document.getElementById('stat-peak').textContent = riseChart.peak.toFixed(1);
+      document.getElementById('last-update').textContent = now;
+    }
+    if (id.includes('footprint')) {
+      document.getElementById('stat-foot').textContent = isNaN(v) ? '--' : v.toFixed(1);
+      if (!isNaN(v)) footChart.push(v);
+    }
+    if (id.includes('detected_dots') || id.includes('dot_count')) {
+      const n = Math.round(v);
+      document.getElementById('stat-dots').textContent = isNaN(v) ? '--' : n;
+      document.getElementById('dot-count-val').textContent = isNaN(v) ? '--' : n;
+    }
+    if (id.includes('calibration_valid')) {
+      const ok = state === 'true' || state === 'True' || state === 'on' || state === '1';
+      calBadge.textContent = ok ? 'Cal: OK' : 'Cal: None';
+      calBadge.className   = 'badge ' + (ok ? 'ok' : 'error');
+    }
+  };
+
+  sse.connect();
+
+  // ── Calibration buttons → ESPHome REST button press ──────────────────────
+  const base = url.replace(/\/$/, '');
+  document.getElementById('cal-btn').addEventListener('click', async () => {
+    await fetch(base + '/button/capture_calibration/press', { method: 'POST' }).catch(() => {});
+  });
+  document.getElementById('clear-cal-btn').addEventListener('click', async () => {
+    if (!confirm('Clear calibration? You will need to recalibrate.')) return;
+    await fetch(base + '/button/clear_calibration/press', { method: 'POST' }).catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
