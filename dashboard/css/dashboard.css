@@ -1,0 +1,132 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0d0d0d;
+  --surface:   #1a1a2e;
+  --border:    #2a2a4a;
+  --accent:    #00d4ff;
+  --accent2:   #7b2fff;
+  --text:      #e0e0f0;
+  --muted:     #888ab0;
+  --green:     #00e676;
+  --red:       #ff1744;
+  --yellow:    #ffd600;
+  --orange:    #ff9100;
+  --radius:    8px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+header h1 { font-size: 1.15rem; font-weight: 600; color: var(--accent); flex: 1; }
+#reset-btn { background: none; border: none; font-size: 1.2rem;
+  color: var(--muted); cursor: pointer; padding: 6px 10px; }
+#reset-btn:hover { color: var(--accent); }
+
+/* ── Badges ── */
+.badge {
+  display: inline-block; padding: 2px 10px; border-radius: 20px;
+  font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.badge.connected    { background: rgba(0,230,118,0.12); color: var(--green);  border: 1px solid var(--green); }
+.badge.disconnected { background: rgba(255,23,68,0.12);  color: var(--red);    border: 1px solid var(--red); }
+.badge.connecting   { background: rgba(255,214,0,0.12);  color: var(--yellow); border: 1px solid var(--yellow); }
+.badge.unknown      { background: rgba(136,138,176,0.12);color: var(--muted);  border: 1px solid var(--border); }
+.badge.ok           { background: rgba(0,230,118,0.12); color: var(--green);  border: 1px solid var(--green); }
+.badge.error        { background: rgba(255,23,68,0.2);   color: var(--red);    border: 1px solid var(--red); }
+
+/* ── Connect panel ── */
+#connect-panel {
+  max-width: 420px; margin: 40px auto; padding: 28px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  display: flex; flex-direction: column; gap: 14px;
+}
+#connect-panel label { display: flex; flex-direction: column; gap: 6px;
+  color: var(--muted); font-size: 0.85rem; }
+#connect-panel input {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+  color: var(--text); padding: 8px 10px; font-size: 0.9rem; outline: none;
+}
+#connect-panel input:focus { border-color: var(--accent); }
+#connect-panel .hint { color: var(--muted); font-size: 0.78rem; }
+#connect-btn { background: var(--accent2); border-color: var(--accent2); color: #fff;
+  padding: 10px; font-size: 1rem; cursor: pointer; border-radius: 4px; }
+#connect-btn:hover { opacity: 0.85; }
+
+/* ── Main layout ── */
+#dashboard { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+
+#controls {
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.ctrl-group { display: flex; align-items: center; gap: 8px; }
+.ctrl-group .label { color: var(--muted); font-size: 0.8rem; }
+
+button {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+  color: var(--text); padding: 5px 12px; cursor: pointer; font-size: 0.82rem;
+  transition: border-color 0.15s, color 0.15s;
+}
+button:hover  { border-color: var(--accent); color: var(--accent); }
+button.danger { border-color: var(--red); color: var(--red); }
+button.danger:hover { background: rgba(255,23,68,0.1); }
+
+/* ── Viz area: camera left, charts right ── */
+#viz-area {
+  flex: 1; display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0; overflow: hidden;
+}
+
+#camera-wrap {
+  background: #000; border-right: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  min-width: 160px; position: relative;
+}
+#camera-feed { display: block; image-rendering: pixelated; }
+#camera-overlay {
+  position: absolute; bottom: 6px; left: 6px; right: 6px;
+  font-size: 0.68rem; color: rgba(255,255,255,0.55); text-align: center;
+}
+
+#charts {
+  display: flex; flex-direction: column; gap: 0; overflow: hidden;
+}
+.chart-panel {
+  flex: 1; display: flex; flex-direction: column;
+  border-bottom: 1px solid var(--border); padding: 8px 12px; overflow: hidden;
+}
+.chart-panel:last-child { border-bottom: none; }
+.chart-title { font-size: 0.75rem; color: var(--muted); margin-bottom: 4px; }
+.chart-panel canvas { flex: 1; width: 100%; }
+
+/* ── Stats bar ── */
+#stats {
+  display: flex; gap: 24px; padding: 8px 16px;
+  background: var(--surface); border-top: 1px solid var(--border); flex-shrink: 0;
+}
+.stat { display: flex; align-items: baseline; gap: 6px; }
+.stat span   { color: var(--muted); font-size: 0.75rem; }
+.stat strong { font-size: 1rem; color: var(--accent); }
+
+.hidden { display: none !important; }
