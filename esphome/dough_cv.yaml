@@ -14,6 +14,10 @@ esp32:
   framework:
     type: arduino
 
+psram:
+  mode: octal
+  speed: 80MHz
+
 logger:
   level: INFO
 
@@ -37,10 +41,17 @@ captive_portal:
 web_server:
   port: 80
 
-# ── I²C (not used for CV but kept for future sensor add-ons) ──────────────────
-# i2c:
-#   sda: GPIO5
-#   scl: GPIO6
+# ── I²C buses ────────────────────────────────────────────────────────────────
+# Camera SCCB (OV2640 control) uses its own dedicated I²C bus on GPIO40/39.
+# A second bus on GPIO5/6 is available for future add-on sensors.
+i2c:
+  - id: camera_i2c
+    sda: GPIO40
+    scl: GPIO39
+    frequency: 100kHz
+  # - id: sensor_i2c
+  #   sda: GPIO5
+  #   scl: GPIO6
 
 # ── OV2640 camera (XIAO ESP32-S3 Sense pin map) ───────────────────────────────
 esp32_camera:
@@ -48,9 +59,7 @@ esp32_camera:
   external_clock:
     pin: GPIO10
     frequency: 20MHz
-  i2c_pins:
-    sda: GPIO40
-    scl: GPIO39
+  i2c_id: camera_i2c
   data_pins: [GPIO15, GPIO17, GPIO18, GPIO16, GPIO14, GPIO12, GPIO11, GPIO48]
   vsync_pin: GPIO38
   href_pin:  GPIO47
