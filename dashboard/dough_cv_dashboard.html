@@ -186,11 +186,18 @@ function start(url) {
   statusBadge.textContent = 'Connecting…';
   statusBadge.className   = 'badge connecting';
 
-  // MJPEG stream runs on its own port (:81) via esp32_camera_web_server
-  const streamUrl = url.replace(/\/$/, '').replace(/:\d+$/, '') + ':81';
-  cameraFeed.src = streamUrl;
+  // Snapshot polling — pulls a fresh JPEG from :81 every 2s.
+  // Avoids the continuous FB-OVF that MJPEG streaming causes.
+  const host = url.replace(/\/$/, '').replace(/:\d+$/, '');
+  const snapUrl = host + ':81';
   cameraFeed.style.width  = '160px';
   cameraFeed.style.height = '120px';
+
+  function refreshSnapshot() {
+    cameraFeed.src = snapUrl + '?t=' + Date.now();  // cache-bust
+  }
+  refreshSnapshot();
+  setInterval(refreshSnapshot, 2000);
   cameraFeed.onerror = () => {
     document.getElementById('camera-overlay').textContent = 'Camera unavailable — check :81';
   };
