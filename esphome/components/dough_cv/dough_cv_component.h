@@ -57,7 +57,10 @@ class DoughCVComponent : public Component, public camera::CameraListener {
   void on_camera_image(const std::shared_ptr<camera::CameraImage> &image) override;
 
  private:
-  std::vector<DotPos> find_dots_(const uint8_t *buf, int w, int h, pixformat_t fmt);
+  // Internal frame format tag (avoids leaking pixformat_t into the interface)
+  enum class Fmt { RGB565, GRAYSCALE, RGB888 };
+
+  std::vector<DotPos> find_dots_(const uint8_t *buf, int w, int h, Fmt fmt);
   float rise_height_mm_(const std::vector<DotPos> &dots, int frame_w);
   float footprint_mm_  (const std::vector<DotPos> &dots, int frame_w);
   void  save_cal_();
@@ -74,6 +77,8 @@ class DoughCVComponent : public Component, public camera::CameraListener {
   float    scale_factor_   {1.0f};
 
   esp32_camera::ESP32Camera *camera_{nullptr};
+  uint8_t *decode_buf_{nullptr};   // PSRAM buffer for JPEG→RGB888 decode
+  size_t   decode_buf_len_{0};
 
   std::vector<DotPos> cal_dots_;
   bool     calibrated_   {false};

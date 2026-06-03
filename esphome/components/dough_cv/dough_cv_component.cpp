@@ -2,6 +2,7 @@
 #include "esphome/core/log.h"
 #include "esphome/core/application.h"
 #include "esphome/core/hal.h"
+#include "img_converters.h"   // fmt2rgb888 — from the esp32-camera library
 
 #include <algorithm>
 
@@ -23,6 +24,19 @@ void DoughCVComponent::setup() {
   }
 
   camera_->add_listener(this);
+
+  // Pre-allocate PSRAM decode buffer: 160×120 RGB888 = 57 600 bytes.
+  // Over-size to 320×240 so it works if resolution is bumped later.
+  decode_buf_len_ = 320 * 240 * 3;
+  decode_buf_ = (uint8_t *)heap_caps_malloc(decode_buf_len_, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!decode_buf_) {
+    ESP_LOGE(TAG, "Failed to allocate PSRAM decode buffer — falling back to internal RAM");
+    decode_buf_ = (uint8_t *)malloc(decode_buf_len_);
+  }
+  if (!decode_buf_) {
+    ESP_LOGE(TAG, "No memory for decode buffer — marking failed");
+    mark_failed(); return;
+  }
 
   ESP_LOGI(TAG, "DoughCV ready | angle=%.1f° height=%.0fmm threshold=%d calibrated=%s",
            laser_angle_deg_, mount_height_mm_, dot_threshold_,
@@ -52,15 +66,31 @@ void DoughCVComponent::on_camera_image(const std::shared_ptr<camera::CameraImage
   // Downcast to get the raw ESP32 frame buffer
   auto *esp_img = static_cast<esp32_camera::ESP32CameraImage *>(image.get());
   camera_fb_t *fb = esp_img->get_raw_buffer();
-  if (!fb) return;
+  if (!fb || !decode_buf_) return;
 
-  if (fb->format != PIXFORMAT_RGB565 && fb->format != PIXFORMAT_GRAYSCALE) {
-    ESP_LOGW(TAG, "Frame format %d is not RGB565/GRAYSCALE — cannot process. "
-             "Remove jpeg_quality from esp32_camera config.", fb->format);
+  const uint8_t *pixel_buf = nullptr;
+  Fmt fmt;
+
+  if (fb->format == PIXFORMAT_RGB565) {
+    pixel_buf = (const uint8_t *)fb->buf;
+    fmt = Fmt::RGB565;
+  } else if (fb->format == PIXFORMAT_GRAYSCALE) {
+    pixel_buf = (const uint8_t *)fb->buf;
+    fmt = Fmt::GRAYSCALE;
+  } else if (fb->format == PIXFORMAT_JPEG) {
+    // Decode JPEG → RGB888 into pre-allocated PSRAM buffer
+    if (!fmt2rgb888(fb->buf, fb->len, PIXFORMAT_JPEG, decode_buf_)) {
+      ESP_LOGW(TAG, "JPEG decode failed");
+      return;
+    }
+    pixel_buf = decode_buf_;
+    fmt = Fmt::RGB888;
+  } else {
+    ESP_LOGW(TAG, "Unsupported frame format %d", fb->format);
     return;
   }
 
-  auto dots = find_dots_((const uint8_t *)fb->buf, fb->width, fb->height, fb->format);
+  auto dots = find_dots_(pixel_buf, fb->width, fb->height, fmt);
   ESP_LOGD(TAG, "%d dots found in %dx%d frame", (int)dots.size(), fb->width, fb->height);
 
   // ── Calibration capture ───────────────────────────────────────────────────
@@ -95,25 +125,25 @@ void DoughCVComponent::on_camera_image(const std::shared_ptr<camera::CameraImage
 
 // ── Dot detection (red-channel threshold + BFS blob finder) ──────────────────
 
-std::vector<DotPos> DoughCVComponent::find_dots_(const uint8_t *buf, int w, int h,
-                                                   pixformat_t fmt) {
+std::vector<DotPos> DoughCVComponent::find_dots_(const uint8_t *buf, int w, int h, Fmt fmt) {
   std::vector<bool> vis(w * h, false);
   std::vector<DotPos> dots;
   dots.reserve(MAX_DOTS);
 
-  const bool is_rgb565 = (fmt == PIXFORMAT_RGB565);
-
-  // For RGB565: check red channel dominates green (laser dot colour rejection).
-  // For grayscale: simple brightness threshold — no colour info available.
+  // For colour formats: require red channel to dominate green (650 nm laser).
+  // For grayscale: simple brightness threshold.
   auto is_dot = [&](int x, int y) -> bool {
-    if (is_rgb565) {
+    if (fmt == Fmt::RGB565) {
       int i = (y * w + x) * 2;
       uint16_t p = ((uint16_t)buf[i] << 8) | buf[i + 1];
       uint8_t r = (uint8_t)((p >> 11) << 3);
       uint8_t g = (uint8_t)(((p >> 5) & 0x3F) << 2);
       return r >= dot_threshold_ && r > (uint8_t)(g * 1.5f);
+    } else if (fmt == Fmt::RGB888) {
+      int i = (y * w + x) * 3;
+      uint8_t r = buf[i], g = buf[i + 1];
+      return r >= dot_threshold_ && r > (uint8_t)(g * 1.5f);
     } else {
-      // Grayscale: assume ambient is dark and laser is bright
       return buf[y * w + x] >= dot_threshold_;
     }
   };
