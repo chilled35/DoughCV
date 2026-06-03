@@ -186,10 +186,13 @@ function start(url) {
   statusBadge.textContent = 'Connecting…';
   statusBadge.className   = 'badge connecting';
 
-  // Point camera MJPEG stream at the device
-  cameraFeed.src = url.replace(/\/$/, '') + '/camera/stream';
+  // MJPEG stream runs on its own port (:81) via esp32_camera_web_server
+  const streamUrl = url.replace(/\/$/, '').replace(/:\d+$/, '') + ':81';
+  cameraFeed.src = streamUrl;
+  cameraFeed.style.width  = '160px';
+  cameraFeed.style.height = '120px';
   cameraFeed.onerror = () => {
-    document.getElementById('camera-overlay').textContent = 'Camera stream unavailable';
+    document.getElementById('camera-overlay').textContent = 'Camera unavailable — check :81';
   };
 
   const sse = new ESPHomeSensor(url);

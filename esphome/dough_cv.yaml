@@ -65,10 +65,13 @@ esp32_camera:
   href_pin:  GPIO47
   pixel_clock_pin: GPIO13
   resolution: 160x120      # QQVGA — sufficient for dot tracking, fast to process
-  # Do NOT add jpeg_quality here — it switches the driver to JPEG mode and
-  # the dough_cv component cannot do pixel-level operations on a JPEG buffer.
-  # The driver runs in RGB565 by default; ESPHome re-encodes to JPEG only for
-  # the web stream, leaving the raw buffer available for CV processing.
+
+# ── Camera web server (MJPEG stream on :81, snapshot on :82) ─────────────────
+esp32_camera_web_server:
+  - port: 81
+    mode: stream
+  - port: 82
+    mode: snapshot
 
 # ── Structured-light CV component ────────────────────────────────────────────
 external_components:
