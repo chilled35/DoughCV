@@ -98,7 +98,8 @@ dough_cv:
     accuracy_decimals: 1
 
   dot_count:
-    name: "Detected Dots"
+    name: "Line Coverage"
+    unit_of_measurement: "%"
     accuracy_decimals: 0
 
 # ── Calibration controls ──────────────────────────────────────────────────────

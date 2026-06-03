@@ -45,7 +45,7 @@ export class ESPHomeSensor {
     const endpoints = [
       ['/sensor/Rise Height',         'sensor-rise_height'],
       ['/sensor/Footprint Diameter',  'sensor-footprint_diameter'],
-      ['/sensor/Detected Dots',       'sensor-detected_dots'],
+      ['/sensor/Line Coverage',        'sensor-detected_dots'],
       ['/binary_sensor/Calibration Valid', 'binary_sensor-calibration_valid'],
     ];
     for (const [ep, id] of endpoints) {

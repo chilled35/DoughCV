@@ -34,8 +34,8 @@
       <button id="clear-cal-btn" class="danger">Clear</button>
     </div>
     <div class="ctrl-group">
-      <span class="label">Dots</span>
-      <strong id="dot-count-val" style="color:var(--accent)">--</strong>
+      <span class="label">Line Coverage</span>
+      <strong id="dot-count-val" style="color:var(--accent)">--</strong> %
     </div>
     <div class="ctrl-group">
       <span class="label">Last update</span>
@@ -66,7 +66,7 @@
   <section id="stats">
     <div class="stat"><span>Rise Height</span><strong id="stat-rise">--</strong> mm</div>
     <div class="stat"><span>Footprint</span><strong id="stat-foot">--</strong> mm</div>
-    <div class="stat"><span>Dots Detected</span><strong id="stat-dots">--</strong></div>
+    <div class="stat"><span>Line Coverage</span><strong id="stat-dots">--</strong> %</div>
     <div class="stat"><span>Peak Rise</span><strong id="stat-peak">--</strong> mm</div>
   </section>
 
@@ -232,9 +232,8 @@ function start(url) {
       if (!isNaN(v)) footChart.push(v);
     }
     if (id.includes('detected_dots') || id.includes('dot_count')) {
-      const n = Math.round(v);
-      document.getElementById('stat-dots').textContent = isNaN(v) ? '--' : n;
-      document.getElementById('dot-count-val').textContent = isNaN(v) ? '--' : n;
+      document.getElementById('stat-dots').textContent = isNaN(v) ? '--' : v.toFixed(0);
+      document.getElementById('dot-count-val').textContent = isNaN(v) ? '--' : v.toFixed(0);
     }
     if (id.includes('calibration_valid')) {
       const ok = state === 'true' || state === 'True' || state === 'on' || state === '1';
