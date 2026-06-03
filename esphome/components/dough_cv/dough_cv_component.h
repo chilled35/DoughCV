@@ -3,6 +3,7 @@
 #include "esphome/core/component.h"
 #include "esphome/core/preferences.h"
 #include "esphome/components/sensor/sensor.h"
+#include "esphome/components/camera/camera.h"
 #include "esphome/components/esp32_camera/esp32_camera.h"
 
 #include <vector>
@@ -24,7 +25,7 @@ struct CalData {
   float   y[MAX_DOTS];
 };
 
-class DoughCVComponent : public Component {
+class DoughCVComponent : public Component, public camera::CameraListener {
  public:
   // ── Component lifecycle ────────────────────────────────────────────────────
   void setup()       override;
@@ -52,8 +53,10 @@ class DoughCVComponent : public Component {
   void clear_calibration();
   bool is_calibrated() const  { return calibrated_; }
 
+  // CameraListener interface
+  void on_camera_image(const std::shared_ptr<camera::CameraImage> &image) override;
+
  private:
-  void on_frame_(std::shared_ptr<esp32_camera::CameraImageData> img);
   std::vector<DotPos> find_dots_(const uint8_t *buf, int w, int h, pixformat_t fmt);
   float rise_height_mm_(const std::vector<DotPos> &dots, int frame_w);
   float footprint_mm_  (const std::vector<DotPos> &dots, int frame_w);

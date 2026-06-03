@@ -22,9 +22,7 @@ void DoughCVComponent::setup() {
     return;
   }
 
-  camera_->add_image_callback(
-    [this](std::shared_ptr<esp32_camera::CameraImageData> img) { on_frame_(img); }
-  );
+  camera_->add_listener(this);
 
   ESP_LOGI(TAG, "DoughCV ready | angle=%.1f° height=%.0fmm threshold=%d calibrated=%s",
            laser_angle_deg_, mount_height_mm_, dot_threshold_,
@@ -44,20 +42,19 @@ void DoughCVComponent::dump_config() {
 
 // ── Frame processing ──────────────────────────────────────────────────────────
 
-void DoughCVComponent::on_frame_(std::shared_ptr<esp32_camera::CameraImageData> img) {
+void DoughCVComponent::on_camera_image(const std::shared_ptr<camera::CameraImage> &image) {
   uint32_t now = millis();
   bool do_process   = (now - last_ms_) >= interval_ms_;
   bool do_calibrate = capture_next_;
 
   if (!do_process && !do_calibrate) return;
 
-  camera_fb_t *fb = img->get_raw_buffer();
+  // Downcast to get the raw ESP32 frame buffer
+  auto *esp_img = static_cast<esp32_camera::ESP32CameraImage *>(image.get());
+  camera_fb_t *fb = esp_img->get_raw_buffer();
   if (!fb) return;
 
   if (fb->format != PIXFORMAT_RGB565 && fb->format != PIXFORMAT_GRAYSCALE) {
-    // Driver is in JPEG mode — can't do pixel ops without a decoder.
-    // Set `single_buffer: true` and no `jpeg_quality` key in the YAML camera
-    // config, or add `format: grayscale` once ESPHome exposes it.
     ESP_LOGW(TAG, "Frame format %d is not RGB565/GRAYSCALE — cannot process. "
              "Remove jpeg_quality from esp32_camera config.", fb->format);
     return;

@@ -11,7 +11,7 @@ from esphome.const import (
 
 CONF_ESP32_CAMERA_ID = "esp32_camera_id"
 
-DEPENDENCIES = ["esp32_camera", "preferences"]
+DEPENDENCIES = ["camera", "esp32_camera", "preferences"]
 AUTO_LOAD = ["sensor"]
 
 dough_cv_ns = cg.esphome_ns.namespace("dough_cv")
