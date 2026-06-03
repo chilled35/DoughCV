@@ -30,10 +30,8 @@ ota:
     password: !secret ota_password
 
 wifi:
-  networks:
-    - ssid: !secret wifi_ssid
-      password: !secret wifi_password
-      bssid: A0:8E:24:11:28:45   # 2.4 GHz AP — the one that connects successfully
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
   ap:
     ssid: "${friendly_name} AP"
     password: !secret ap_fallback_password
