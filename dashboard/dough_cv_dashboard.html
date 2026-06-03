@@ -158,24 +158,16 @@ window.addEventListener('resize', () => { riseChart._draw(); footChart._draw(); 
 statusBadge.textContent = 'Connecting…';
 statusBadge.className   = 'badge connecting';
 
-// Priority: 1) ?url= query param  2) localStorage  3) show setup panel
-const params   = new URLSearchParams(window.location.search);
-const queryUrl = params.get('url');
-const savedUrl = queryUrl || localStorage.getItem(KEY);
-
-if (savedUrl) {
-  if (queryUrl) localStorage.setItem(KEY, queryUrl);  // persist if provided via URL
-  start(savedUrl);
-} else {
-  showPanel();
-}
+// Use saved URL, otherwise fall back to the device's mDNS name
+const savedUrl = localStorage.getItem(KEY) || 'http://dough-cv.local';
+start(savedUrl);
 
 function showPanel() {
-  statusBadge.textContent = 'Setup needed';
+  statusBadge.textContent = 'Cannot reach device';
   statusBadge.className   = 'badge unknown';
   connectPanel.classList.remove('hidden');
   const input = document.getElementById('device-url');
-  if (localStorage.getItem(KEY)) input.value = localStorage.getItem(KEY);
+  input.value = localStorage.getItem(KEY) || 'http://dough-cv.local';
   document.getElementById('connect-btn').addEventListener('click', () => {
     const url = input.value.trim();
     if (!url) return;
@@ -209,30 +201,10 @@ function start(url) {
     dashboard.classList.remove('hidden');
   };
 
-  let connectAttempts = 0;
   sse.onDisconnect = () => {
-    connectAttempts++;
-    if (connectAttempts === 1 && window.location.protocol === 'https:' &&
-        url.startsWith('http:')) {
-      // Almost certainly a mixed-content block (HTTPS page → HTTP device)
-      statusBadge.textContent = 'Blocked (mixed content)';
-      statusBadge.className   = 'badge error';
-      const warn = document.createElement('div');
-      warn.className = 'mixed-content-warn';
-      warn.innerHTML = `
-        <strong>⚠ Browser blocked the connection.</strong><br>
-        Home Assistant is served over HTTPS, but your ESP32 is HTTP — browsers
-        block this automatically.<br><br>
-        <a href="${url}" target="_blank" rel="noopener">
-          Open dashboard directly on the ESP32 →
-        </a><br><br>
-        <em>Or: in Chrome, visit <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>
-        and add <code>${url}</code>.</em>`;
-      document.body.appendChild(warn);
-    } else {
-      statusBadge.textContent = 'Disconnected';
-      statusBadge.className   = 'badge disconnected';
-    }
+    statusBadge.textContent = 'Disconnected — retrying…';
+    statusBadge.className   = 'badge disconnected';
+    setTimeout(() => sse.connect(), 5000);
   };
 
   sse.onState = (id, state) => {
