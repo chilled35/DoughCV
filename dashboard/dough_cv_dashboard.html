@@ -240,12 +240,13 @@ function start(url) {
 
   // ── Calibration buttons → ESPHome REST button press ──────────────────────
   const base = url.replace(/\/$/, '');
+  // ESPHome 2026.x uses entity display name in button press URLs
   document.getElementById('cal-btn').addEventListener('click', async () => {
-    await fetch(base + '/button/capture_calibration/press', { method: 'POST' }).catch(() => {});
+    await fetch(base + '/button/Capture Calibration/press', { method: 'POST' }).catch(() => {});
   });
   document.getElementById('clear-cal-btn').addEventListener('click', async () => {
     if (!confirm('Clear calibration? You will need to recalibrate.')) return;
-    await fetch(base + '/button/clear_calibration/press', { method: 'POST' }).catch(() => {});
+    await fetch(base + '/button/Clear Calibration/press', { method: 'POST' }).catch(() => {});
   });
 }
 </script>
