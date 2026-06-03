@@ -44,13 +44,16 @@ class DoughCVComponent : public Component {
   void set_process_interval_ms(uint32_t v) { interval_ms_  = v; }
   void set_scale_factor(float v)        { scale_factor_    = v; }
 
+  // ── Camera reference (injected from __init__.py) ───────────────────────────
+  void set_camera(esp32_camera::ESP32Camera *cam) { camera_ = cam; }
+
   // ── Public API (called from YAML lambdas) ──────────────────────────────────
   void capture_calibration()  { capture_next_ = true; }
   void clear_calibration();
   bool is_calibrated() const  { return calibrated_; }
 
  private:
-  void on_frame_(std::shared_ptr<esp32_camera::CameraImage> img);
+  void on_frame_(std::shared_ptr<esp32_camera::CameraImageData> img);
   std::vector<DotPos> find_dots_(const uint8_t *buf, int w, int h, pixformat_t fmt);
   float rise_height_mm_(const std::vector<DotPos> &dots, int frame_w);
   float footprint_mm_  (const std::vector<DotPos> &dots, int frame_w);
@@ -66,6 +69,8 @@ class DoughCVComponent : public Component {
   uint8_t  dot_threshold_  {180};
   uint32_t interval_ms_    {2000};
   float    scale_factor_   {1.0f};
+
+  esp32_camera::ESP32Camera *camera_{nullptr};
 
   std::vector<DotPos> cal_dots_;
   bool     calibrated_   {false};

@@ -16,14 +16,14 @@ void DoughCVComponent::setup() {
   pref_ = global_preferences->make_preference<CalData>(fnv1_hash("dough_cv_v1"));
   load_cal_();
 
-  if (esp32_camera::global_esp32_camera == nullptr) {
-    ESP_LOGE(TAG, "No esp32_camera component — add it to your YAML");
+  if (camera_ == nullptr) {
+    ESP_LOGE(TAG, "No camera set — add esp32_camera_id to dough_cv config");
     mark_failed();
     return;
   }
 
-  esp32_camera::global_esp32_camera->add_image_callback(
-    [this](std::shared_ptr<esp32_camera::CameraImage> img) { on_frame_(img); }
+  camera_->add_image_callback(
+    [this](std::shared_ptr<esp32_camera::CameraImageData> img) { on_frame_(img); }
   );
 
   ESP_LOGI(TAG, "DoughCV ready | angle=%.1f° height=%.0fmm threshold=%d calibrated=%s",
@@ -44,7 +44,7 @@ void DoughCVComponent::dump_config() {
 
 // ── Frame processing ──────────────────────────────────────────────────────────
 
-void DoughCVComponent::on_frame_(std::shared_ptr<esp32_camera::CameraImage> img) {
+void DoughCVComponent::on_frame_(std::shared_ptr<esp32_camera::CameraImageData> img) {
   uint32_t now = millis();
   bool do_process   = (now - last_ms_) >= interval_ms_;
   bool do_calibrate = capture_next_;

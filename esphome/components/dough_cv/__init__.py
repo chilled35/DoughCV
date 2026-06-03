@@ -1,6 +1,6 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import sensor
+from esphome.components import sensor, esp32_camera
 from esphome.const import (
     CONF_ID,
     UNIT_MILLIMETER,
@@ -8,6 +8,8 @@ from esphome.const import (
     DEVICE_CLASS_DISTANCE,
     STATE_CLASS_MEASUREMENT,
 )
+
+CONF_ESP32_CAMERA_ID = "esp32_camera_id"
 
 DEPENDENCIES = ["esp32_camera", "preferences"]
 AUTO_LOAD = ["sensor"]
@@ -46,6 +48,7 @@ CONFIG_SCHEMA = cv.Schema(
             accuracy_decimals=0,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
+        cv.GenerateID(CONF_ESP32_CAMERA_ID): cv.use_id(esp32_camera.ESP32Camera),
         cv.Optional(CONF_LASER_ANGLE, default=30.0): cv.float_range(min=10.0, max=60.0),
         cv.Optional(CONF_MOUNT_HEIGHT, default=200.0): cv.positive_float,
         cv.Optional(CONF_DOT_THRESHOLD, default=180): cv.int_range(min=50, max=255),
@@ -58,6 +61,9 @@ CONFIG_SCHEMA = cv.Schema(
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
+
+    cam = await cg.get_variable(config[CONF_ESP32_CAMERA_ID])
+    cg.add(var.set_camera(cam))
 
     # Expose a typed global pointer so YAML lambdas can call
     # dough_cv_component->capture_calibration() etc.
