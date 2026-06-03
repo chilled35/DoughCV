@@ -158,8 +158,13 @@ window.addEventListener('resize', () => { riseChart._draw(); footChart._draw(); 
 statusBadge.textContent = 'Connecting…';
 statusBadge.className   = 'badge connecting';
 
-const savedUrl = localStorage.getItem(KEY);
+// Priority: 1) ?url= query param  2) localStorage  3) show setup panel
+const params   = new URLSearchParams(window.location.search);
+const queryUrl = params.get('url');
+const savedUrl = queryUrl || localStorage.getItem(KEY);
+
 if (savedUrl) {
+  if (queryUrl) localStorage.setItem(KEY, queryUrl);  // persist if provided via URL
   start(savedUrl);
 } else {
   showPanel();
@@ -204,9 +209,30 @@ function start(url) {
     dashboard.classList.remove('hidden');
   };
 
+  let connectAttempts = 0;
   sse.onDisconnect = () => {
-    statusBadge.textContent = 'Disconnected';
-    statusBadge.className   = 'badge disconnected';
+    connectAttempts++;
+    if (connectAttempts === 1 && window.location.protocol === 'https:' &&
+        url.startsWith('http:')) {
+      // Almost certainly a mixed-content block (HTTPS page → HTTP device)
+      statusBadge.textContent = 'Blocked (mixed content)';
+      statusBadge.className   = 'badge error';
+      const warn = document.createElement('div');
+      warn.className = 'mixed-content-warn';
+      warn.innerHTML = `
+        <strong>⚠ Browser blocked the connection.</strong><br>
+        Home Assistant is served over HTTPS, but your ESP32 is HTTP — browsers
+        block this automatically.<br><br>
+        <a href="${url}" target="_blank" rel="noopener">
+          Open dashboard directly on the ESP32 →
+        </a><br><br>
+        <em>Or: in Chrome, visit <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>
+        and add <code>${url}</code>.</em>`;
+      document.body.appendChild(warn);
+    } else {
+      statusBadge.textContent = 'Disconnected';
+      statusBadge.className   = 'badge disconnected';
+    }
   };
 
   sse.onState = (id, state) => {
