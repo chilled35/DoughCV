@@ -12,43 +12,43 @@
 namespace esphome {
 namespace dough_cv {
 
-static const int MAX_DOTS     = 32;   // maximum laser dots we track
-static const int MIN_BLOB_PX  = 3;    // smallest valid dot blob (pixels)
-static const int MAX_BLOB_PX  = 150;  // largest valid dot blob (pixels)
-static const float MAX_MATCH_PX = 40.0f;  // max px distance to match a dot to its calibration ref
+// Number of column samples across the frame (every 4 px at 160 px wide).
+// Stored in NVS — changing this requires bumping CAL_NVS_KEY.
+static const int LINE_COLS = 40;
 
-struct DotPos { float x, y; };
+// Per-column line profile: intensity-weighted centroid y of the horizontal
+// laser line, sampled at LINE_COLS evenly-spaced columns across the frame.
+struct LineProfile {
+  float y[LINE_COLS];
+  bool  valid[LINE_COLS];
+  int   n_valid{0};
+};
 
 struct CalData {
-  uint8_t n;
-  float   x[MAX_DOTS];
-  float   y[MAX_DOTS];
+  float y[LINE_COLS];
+  bool  valid[LINE_COLS];
 };
+
+static const char *CAL_NVS_KEY = "dough_cv_v2";  // bump if CalData layout changes
 
 class DoughCVComponent : public Component, public camera::CameraListener {
  public:
-  // ── Component lifecycle ────────────────────────────────────────────────────
   void setup()       override;
   void loop()        override {}
   void dump_config() override;
   float get_setup_priority() const override { return setup_priority::LATE; }
 
-  // ── Sensor registration ────────────────────────────────────────────────────
   void set_rise_height_sensor(sensor::Sensor *s) { rise_height_ = s; }
-  void set_footprint_sensor(sensor::Sensor *s)   { footprint_  = s; }
-  void set_dot_count_sensor(sensor::Sensor *s)   { dot_count_  = s; }
+  void set_footprint_sensor(sensor::Sensor *s)   { footprint_   = s; }
+  void set_dot_count_sensor(sensor::Sensor *s)   { line_cov_    = s; }  // repurposed: line coverage %
 
-  // ── Configuration setters (called from generated code) ────────────────────
-  void set_laser_angle_deg(float v)     { laser_angle_deg_ = v; }
-  void set_mount_height_mm(float v)     { mount_height_mm_ = v; }
-  void set_dot_threshold(uint8_t v)     { dot_threshold_   = v; }
-  void set_process_interval_ms(uint32_t v) { interval_ms_  = v; }
-  void set_scale_factor(float v)        { scale_factor_    = v; }
+  void set_laser_angle_deg(float v)        { laser_angle_deg_ = v; }
+  void set_mount_height_mm(float v)        { mount_height_mm_ = v; }
+  void set_dot_threshold(uint8_t v)        { threshold_       = v; }
+  void set_process_interval_ms(uint32_t v) { interval_ms_     = v; }
+  void set_scale_factor(float v)           { scale_factor_    = v; }
+  void set_camera(esp32_camera::ESP32Camera *cam) { camera_    = cam; }
 
-  // ── Camera reference (injected from __init__.py) ───────────────────────────
-  void set_camera(esp32_camera::ESP32Camera *cam) { camera_ = cam; }
-
-  // ── Public API (called from YAML lambdas) ──────────────────────────────────
   void capture_calibration()  { capture_next_ = true; }
   void clear_calibration();
   bool is_calibrated() const  { return calibrated_; }
@@ -57,30 +57,31 @@ class DoughCVComponent : public Component, public camera::CameraListener {
   void on_camera_image(const std::shared_ptr<camera::CameraImage> &image) override;
 
  private:
-  // Internal frame format tag (avoids leaking pixformat_t into the interface)
   enum class Fmt { RGB565, GRAYSCALE, RGB888 };
 
-  std::vector<DotPos> find_dots_(const uint8_t *buf, int w, int h, Fmt fmt);
-  float rise_height_mm_(const std::vector<DotPos> &dots, int frame_w);
-  float footprint_mm_  (const std::vector<DotPos> &dots, int frame_w);
+  LineProfile find_line_(const uint8_t *buf, int w, int h, Fmt fmt);
+  uint8_t     brightness_(const uint8_t *buf, int x, int y, int w, Fmt fmt);
+  float rise_height_mm_(const LineProfile &prof, int frame_w);
+  float footprint_mm_  (const LineProfile &prof, int frame_w);
   void  save_cal_();
   void  load_cal_();
 
   sensor::Sensor *rise_height_{nullptr};
   sensor::Sensor *footprint_  {nullptr};
-  sensor::Sensor *dot_count_  {nullptr};
+  sensor::Sensor *line_cov_   {nullptr};
 
   float    laser_angle_deg_{30.0f};
   float    mount_height_mm_{200.0f};
-  uint8_t  dot_threshold_  {180};
+  uint8_t  threshold_      {180};
   uint32_t interval_ms_    {2000};
   float    scale_factor_   {1.0f};
 
   esp32_camera::ESP32Camera *camera_{nullptr};
-  uint8_t *decode_buf_{nullptr};   // PSRAM buffer for JPEG→RGB888 decode
+  uint8_t *decode_buf_{nullptr};
   size_t   decode_buf_len_{0};
 
-  std::vector<DotPos> cal_dots_;
+  float cal_y_    [LINE_COLS]{};
+  bool  cal_valid_[LINE_COLS]{};
   bool     calibrated_   {false};
   bool     capture_next_ {false};
   uint32_t last_ms_      {0};
