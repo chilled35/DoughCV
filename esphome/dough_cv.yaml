@@ -80,7 +80,7 @@ external_components:
       path: components
 
 dough_cv:
-  id: dough_cv
+  id: dough_cv_comp
   laser_angle_deg: 30.0       # Angle of laser from vertical — measure your mount
   mount_height_mm: 200.0      # Height of sensor above the dough surface
   dot_threshold: 180          # Red-channel threshold for laser dot detection (0-255)
@@ -108,19 +108,19 @@ button:
     name: "Capture Calibration"
     icon: mdi:camera-iris
     on_press:
-      - lambda: "id(dough_cv)->capture_calibration();"
+      - lambda: "id(dough_cv_comp)->capture_calibration();"
 
   - platform: template
     name: "Clear Calibration"
     icon: mdi:camera-off
     on_press:
-      - lambda: "id(dough_cv)->clear_calibration();"
+      - lambda: "id(dough_cv_comp)->clear_calibration();"
 
 binary_sensor:
   - platform: template
     name: "Calibration Valid"
     icon: mdi:check-circle
-    lambda: "return id(dough_cv)->is_calibrated();"
+    lambda: "return id(dough_cv_comp)->is_calibrated();"
     filters:
       - delayed_on: 100ms
 
