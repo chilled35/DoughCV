@@ -65,15 +65,6 @@ async def to_code(config):
     cam = await cg.get_variable(config[CONF_ESP32_CAMERA_ID])
     cg.add(var.set_camera(cam))
 
-    # Expose a typed global pointer so YAML lambdas can call
-    # dough_cv_component->capture_calibration() etc.
-    cg.add_global(cg.RawExpression(
-        f"::esphome::dough_cv::DoughCVComponent *dough_cv_component"
-    ))
-    cg.add(cg.RawExpression(
-        f"dough_cv_component = {var}"
-    ))
-
     if CONF_RISE_HEIGHT in config:
         sens = await sensor.new_sensor(config[CONF_RISE_HEIGHT])
         cg.add(var.set_rise_height_sensor(sens))
