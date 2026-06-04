@@ -231,7 +231,7 @@ function start(url) {
       document.getElementById('stat-foot').textContent = isNaN(v) ? '--' : v.toFixed(1);
       if (!isNaN(v)) footChart.push(v);
     }
-    if (id.includes('detected_dots') || id.includes('dot_count')) {
+    if (id.includes('detected_dots') || id.includes('dot_count') || id.includes('line_coverage')) {
       document.getElementById('stat-dots').textContent = isNaN(v) ? '--' : v.toFixed(0);
       document.getElementById('dot-count-val').textContent = isNaN(v) ? '--' : v.toFixed(0);
     }
