@@ -64,8 +64,8 @@ esp32_camera:
   vsync_pin: GPIO38
   href_pin:  GPIO47
   pixel_clock_pin: GPIO13
-  resolution: 160x120
-  max_framerate: 2fps
+  resolution: 320x240
+  max_framerate: 5fps
   frame_buffer_count: 1  # one frame buffer — prevents FB-OVF at boot and idle
 
 # ── Camera web server (snapshot only — avoids continuous FB-OVF from streaming)
@@ -84,7 +84,7 @@ dough_cv:
   laser_angle_deg: 30.0       # Angle of laser from vertical — measure your mount
   mount_height_mm: 200.0      # Height of sensor above the dough surface
   dot_threshold: 180          # Red-channel threshold for laser dot detection (0-255)
-  process_interval_ms: 2000   # How often to run the CV pipeline
+  process_interval_ms: 500    # How often to run the CV pipeline
   scale_factor: 1.0           # Empirical scale: set to (known_height / reported_height)
 
   rise_height:
