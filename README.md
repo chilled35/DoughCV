@@ -20,24 +20,24 @@ Peer-reviewed food-science literature confirms this: a direct comparison of ToF 
 
 ## How DoughCV works
 
-A **laser diffraction grating** (crosshair dot pattern, salvaged from a Bosch cross-line level) projects a regular grid of dots onto the dough surface from an oblique angle. An overhead **OV2640 camera** (built into the XIAO ESP32-S3 Sense) observes the dot positions.
+A **Bosch laser + crosshair diffraction grating** projects a grid of red dots onto the dough surface from an oblique angle. An overhead **OV2640 camera** (built into the XIAO ESP32-S3 Sense) observes the dot positions.
 
 ```
       Laser (angled ~30° from vertical)
-         \  ·  ·  ·  ·  ·   ← dot row projected across dough
-          \
+         \  ·  ·  ·  ·  ·   ← crosshair dot row across dough
+          \  ·  ·  ·  ·  ·
            \   Flat surface: dots at calibration positions
             \  Risen dome:   dots displaced toward laser
                              displacement ∝ rise height
 ```
 
-When the dough rises, each dot shifts laterally in the camera frame. The shift magnitude at a known laser angle and mount height gives the surface height at that point via triangulation:
+When the dough rises, each dot shifts toward the laser in the camera frame. The shift magnitude gives surface height via triangulation (approx. for small rises):
 
 ```
-height_mm = displacement_px × mount_height_mm / (focal_px × tan(laser_angle))
+height_mm ≈ displacement_px × mount_height_mm / (focal_px × tan(laser_angle))
 ```
 
-This is immune to surface colour, texture, and reflectance — the laser wavelength is simply thresholded in the red channel. Two axes of dots (the crosshair) give height profiles along both X and Y, from which dome height and footprint diameter are extracted.
+This is immune to surface colour, texture, and reflectance — the laser wavelength is simply thresholded in the red channel. The crosshair gives dot rows along both X and Y axes, from which dome height and footprint diameter are extracted.
 
 ---
 
@@ -73,15 +73,18 @@ Dashboard (browser → ESP32 direct)
   └── Footprint time-series chart
 ```
 
+There are two independent firmware paths — use whichever suits your setup:
+
+| Path | Use when |
+|---|---|
+| **ESPHome** (`esphome/`) | You want Home Assistant integration, OTA updates, and the web dashboard |
+| **PlatformIO standalone** (`src/`) | You want to develop or test the CV pipeline directly, without ESPHome overhead |
+
 ---
 
-## Setup
+## ESPHome setup
 
-### 1. Driver files (no external driver needed)
-
-Unlike the VL53L8CX project, this component uses only the ESP32 camera driver built into ESPHome. No external SDK required.
-
-### 2. ESPHome secrets
+### 1. Create secrets file
 
 Create `esphome/secrets.yaml` (gitignored):
 
@@ -93,36 +96,87 @@ api_encryption_key: "base64-key-here"  # generate with: openssl rand -base64 32
 ota_password: "your-ota-password"
 ```
 
-### 3. Flash
+### 2. Flash
 
 ```bash
 cd esphome
 esphome run dough_cv.yaml
 ```
 
-### 4. Calibration
+### 3. Calibrate
 
 1. Place the empty proofing container under the sensor with no dough.
 2. Open the dashboard and confirm laser dots are visible in the camera feed.
 3. Press **Capture Calibration** — the flat-surface dot positions are saved to NVS.
 4. Place your dough and start monitoring.
 
-### 5. Dashboard
+### 4. Dashboard
 
 Copy `dashboard/` to your HA `/config/www/dough_cv/` and visit:
 `http://your-ha-ip/local/dough_cv/dough_cv_dashboard.html`
 
-Or open `dashboard/dough_cv_dashboard.html` directly in a browser pointed at the ESP32.
+Or open `dashboard/dough_cv_dashboard.html` directly in a browser pointed at the ESP32 IP.
 
----
-
-## Geometry calibration
+### Scale factor calibration (ESPHome)
 
 The default `scale_factor: 1.0` uses an estimated OV2640 focal length (~58° HFOV at QQVGA). For accurate mm readings, calibrate with a known-height object:
 
-1. Place a 50mm block on the flat calibration surface.
+1. Place a 50mm block on the calibration surface.
 2. Note the `rise_height_mm` reading.
-3. Set `scale_factor: 50.0 / <reported_value>` in the YAML and reflash.
+3. Set `scale_factor: 50.0 / <reported_value>` in `dough_cv.yaml` and reflash.
+
+---
+
+## PlatformIO standalone firmware
+
+*For direct development and testing of the CV pipeline — no ESPHome required.*
+
+### Build & flash
+
+```bash
+pip install platformio
+pio run -e xiao_esp32s3_sense --target upload
+pio device monitor
+```
+
+### Calibrate
+
+With the dough at its starting height, type `cal` in the serial monitor.
+Optionally provide the known height: `cal 0` (baseline) or `cal 50` (50 mm above reference).
+
+### Watch it rise
+
+Output every 500 ms:
+```
+[rise] 12.34 mm  (cy=44.21 peak=223 n=17)
+```
+
+### Tuning dot detection
+
+Increase `DETECT_THRESHOLD` (default 180) if ambient light causes false detections; decrease if the dot appears dim. Live adjustment without reflashing: `thr 160`
+
+Use `dbg` in the serial monitor to get a 16×16 ASCII brightness map around the detected centroid — useful for setting the threshold:
+```
+[dbg] peak=224 count=14 valid=1 cx=47.83 cy=52.11 thr=180
+```
+
+### Geometry constants (requires reflash)
+
+Edit the build flags in `platformio.ini`:
+
+| Flag | Meaning | Default |
+|------|---------|---------|
+| `LASER_ANGLE_DEG` | Laser tilt from vertical | 30° |
+| `CAMERA_BASELINE_MM` | Horiz. dist. laser exit → camera | 30 mm |
+| `FOCAL_LENGTH_PX` | Camera focal length at 96×96 | 88 px |
+
+### Running native unit tests (no hardware)
+
+```bash
+pio test -e native_test
+```
+
+Tests cover dot centroid accuracy (< 0.5 px error on synthetic Gaussian dot), threshold behaviour, spurious-dot rejection, and triangulation math.
 
 ---
 

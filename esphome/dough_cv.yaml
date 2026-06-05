@@ -14,6 +14,10 @@ esp32:
   framework:
     type: arduino
 
+psram:
+  mode: octal
+  speed: 80MHz
+
 logger:
   level: INFO
 
@@ -37,10 +41,17 @@ captive_portal:
 web_server:
   port: 80
 
-# ── I²C (not used for CV but kept for future sensor add-ons) ──────────────────
-# i2c:
-#   sda: GPIO5
-#   scl: GPIO6
+# ── I²C buses ────────────────────────────────────────────────────────────────
+# Camera SCCB (OV2640 control) uses its own dedicated I²C bus on GPIO40/39.
+# A second bus on GPIO5/6 is available for future add-on sensors.
+i2c:
+  - id: camera_i2c
+    sda: GPIO40
+    scl: GPIO39
+    frequency: 100kHz
+  # - id: sensor_i2c
+  #   sda: GPIO5
+  #   scl: GPIO6
 
 # ── OV2640 camera (XIAO ESP32-S3 Sense pin map) ───────────────────────────────
 esp32_camera:
@@ -48,17 +59,19 @@ esp32_camera:
   external_clock:
     pin: GPIO10
     frequency: 20MHz
-  i2c_pins:
-    sda: GPIO40
-    scl: GPIO39
+  i2c_id: camera_i2c
   data_pins: [GPIO15, GPIO17, GPIO18, GPIO16, GPIO14, GPIO12, GPIO11, GPIO48]
   vsync_pin: GPIO38
   href_pin:  GPIO47
   pixel_clock_pin: GPIO13
-  resolution: 160x120      # QQVGA — sufficient for dot tracking, fast to process
-  jpeg_quality: 10
-  # RGB565 format required for pixel-level dot detection in the custom component
-  # JPEG is still served for the web stream; ESPHome converts internally.
+  resolution: 320x240
+  max_framerate: 5fps
+  frame_buffer_count: 2  # two buffers: one for CV, one for snapshot web server
+
+# ── Camera web server (snapshot only — avoids continuous FB-OVF from streaming)
+esp32_camera_web_server:
+  - port: 81
+    mode: snapshot
 
 # ── Structured-light CV component ────────────────────────────────────────────
 external_components:
@@ -67,10 +80,11 @@ external_components:
       path: components
 
 dough_cv:
+  id: dough_cv_comp
   laser_angle_deg: 30.0       # Angle of laser from vertical — measure your mount
   mount_height_mm: 200.0      # Height of sensor above the dough surface
   dot_threshold: 180          # Red-channel threshold for laser dot detection (0-255)
-  process_interval_ms: 2000   # How often to run the CV pipeline
+  process_interval_ms: 500    # How often to run the CV pipeline
   scale_factor: 1.0           # Empirical scale: set to (known_height / reported_height)
 
   rise_height:
@@ -84,7 +98,8 @@ dough_cv:
     accuracy_decimals: 1
 
   dot_count:
-    name: "Detected Dots"
+    name: "Line Coverage"
+    unit_of_measurement: "%"
     accuracy_decimals: 0
 
 # ── Calibration controls ──────────────────────────────────────────────────────
@@ -93,19 +108,19 @@ button:
     name: "Capture Calibration"
     icon: mdi:camera-iris
     on_press:
-      - lambda: "dough_cv_component->capture_calibration();"
+      - lambda: "id(dough_cv_comp)->capture_calibration();"
 
   - platform: template
     name: "Clear Calibration"
     icon: mdi:camera-off
     on_press:
-      - lambda: "dough_cv_component->clear_calibration();"
+      - lambda: "id(dough_cv_comp)->clear_calibration();"
 
 binary_sensor:
   - platform: template
     name: "Calibration Valid"
     icon: mdi:check-circle
-    lambda: "return dough_cv_component->is_calibrated();"
+    lambda: "return id(dough_cv_comp)->is_calibrated();"
     filters:
       - delayed_on: 100ms
 

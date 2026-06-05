@@ -40,18 +40,19 @@ export class ESPHomeSensor {
   }
 
   async _fetchSensors() {
+    // ESPHome 2026.x uses entity display names in URLs (spaces allowed).
+    // Each entry: [url_path, id_passed_to_onState]
     const endpoints = [
-      '/sensor/rise_height',
-      '/sensor/footprint_diameter',
-      '/sensor/detected_dots',
-      '/binary_sensor/calibration_valid',
+      ['/sensor/Rise Height',         'sensor-rise_height'],
+      ['/sensor/Footprint Diameter',  'sensor-footprint_diameter'],
+      ['/sensor/Line Coverage',        'sensor-detected_dots'],
+      ['/binary_sensor/Calibration Valid', 'binary_sensor-calibration_valid'],
     ];
-    for (const ep of endpoints) {
+    for (const [ep, id] of endpoints) {
       try {
         const res = await fetch(this._base + ep);
         if (!res.ok) continue;
         const data = await res.json();
-        const id = ep.slice(1).replace('/', '-');  // e.g. "sensor-rise_height"
         if (data.value !== undefined && this.onState)
           this.onState(id, String(data.value));
       } catch (_) {}

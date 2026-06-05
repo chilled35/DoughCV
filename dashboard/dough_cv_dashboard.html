@@ -34,8 +34,8 @@
       <button id="clear-cal-btn" class="danger">Clear</button>
     </div>
     <div class="ctrl-group">
-      <span class="label">Dots</span>
-      <strong id="dot-count-val" style="color:var(--accent)">--</strong>
+      <span class="label">Line Coverage</span>
+      <strong id="dot-count-val" style="color:var(--accent)">--</strong> %
     </div>
     <div class="ctrl-group">
       <span class="label">Last update</span>
@@ -47,7 +47,7 @@
     <!-- Live camera feed (MJPEG stream from ESPHome web_server) -->
     <div id="camera-wrap">
       <img id="camera-feed" alt="Camera feed" />
-      <div id="camera-overlay">160 × 120 · OV2640</div>
+      <div id="camera-overlay">320 × 240 · OV2640</div>
     </div>
 
     <!-- Time-series charts -->
@@ -66,7 +66,7 @@
   <section id="stats">
     <div class="stat"><span>Rise Height</span><strong id="stat-rise">--</strong> mm</div>
     <div class="stat"><span>Footprint</span><strong id="stat-foot">--</strong> mm</div>
-    <div class="stat"><span>Dots Detected</span><strong id="stat-dots">--</strong></div>
+    <div class="stat"><span>Line Coverage</span><strong id="stat-dots">--</strong> %</div>
     <div class="stat"><span>Peak Rise</span><strong id="stat-peak">--</strong> mm</div>
   </section>
 
@@ -158,19 +158,16 @@ window.addEventListener('resize', () => { riseChart._draw(); footChart._draw(); 
 statusBadge.textContent = 'Connecting…';
 statusBadge.className   = 'badge connecting';
 
-const savedUrl = localStorage.getItem(KEY);
-if (savedUrl) {
-  start(savedUrl);
-} else {
-  showPanel();
-}
+// Use saved URL, otherwise fall back to the device's mDNS name
+const savedUrl = localStorage.getItem(KEY) || 'http://dough-cv.local';
+start(savedUrl);
 
 function showPanel() {
-  statusBadge.textContent = 'Setup needed';
+  statusBadge.textContent = 'Cannot reach device';
   statusBadge.className   = 'badge unknown';
   connectPanel.classList.remove('hidden');
   const input = document.getElementById('device-url');
-  if (localStorage.getItem(KEY)) input.value = localStorage.getItem(KEY);
+  input.value = localStorage.getItem(KEY) || 'http://dough-cv.local';
   document.getElementById('connect-btn').addEventListener('click', () => {
     const url = input.value.trim();
     if (!url) return;
@@ -189,10 +186,19 @@ function start(url) {
   statusBadge.textContent = 'Connecting…';
   statusBadge.className   = 'badge connecting';
 
-  // Point camera MJPEG stream at the device
-  cameraFeed.src = url.replace(/\/$/, '') + '/camera/stream';
+  // Snapshot polling — pulls a fresh JPEG from :81 every 2s.
+  // Avoids the continuous FB-OVF that MJPEG streaming causes.
+  const host = url.replace(/\/$/, '').replace(/:\d+$/, '');
+  const snapUrl = host + ':81';
+  // width set in CSS; height auto-scales with the image
+
+  function refreshSnapshot() {
+    cameraFeed.src = snapUrl + '?t=' + Date.now();  // cache-bust
+  }
+  refreshSnapshot();
+  setInterval(refreshSnapshot, 1000);
   cameraFeed.onerror = () => {
-    document.getElementById('camera-overlay').textContent = 'Camera stream unavailable';
+    document.getElementById('camera-overlay').textContent = 'Camera unavailable — check :81';
   };
 
   const sse = new ESPHomeSensor(url);
@@ -205,8 +211,9 @@ function start(url) {
   };
 
   sse.onDisconnect = () => {
-    statusBadge.textContent = 'Disconnected';
+    statusBadge.textContent = 'Disconnected — retrying…';
     statusBadge.className   = 'badge disconnected';
+    setTimeout(() => sse.connect(), 5000);
   };
 
   sse.onState = (id, state) => {
@@ -223,10 +230,9 @@ function start(url) {
       document.getElementById('stat-foot').textContent = isNaN(v) ? '--' : v.toFixed(1);
       if (!isNaN(v)) footChart.push(v);
     }
-    if (id.includes('detected_dots') || id.includes('dot_count')) {
-      const n = Math.round(v);
-      document.getElementById('stat-dots').textContent = isNaN(v) ? '--' : n;
-      document.getElementById('dot-count-val').textContent = isNaN(v) ? '--' : n;
+    if (id.includes('detected_dots') || id.includes('dot_count') || id.includes('line_coverage')) {
+      document.getElementById('stat-dots').textContent = isNaN(v) ? '--' : v.toFixed(0);
+      document.getElementById('dot-count-val').textContent = isNaN(v) ? '--' : v.toFixed(0);
     }
     if (id.includes('calibration_valid')) {
       const ok = state === 'true' || state === 'True' || state === 'on' || state === '1';
@@ -239,12 +245,13 @@ function start(url) {
 
   // ── Calibration buttons → ESPHome REST button press ──────────────────────
   const base = url.replace(/\/$/, '');
+  // ESPHome 2026.x uses entity display name in button press URLs
   document.getElementById('cal-btn').addEventListener('click', async () => {
-    await fetch(base + '/button/capture_calibration/press', { method: 'POST' }).catch(() => {});
+    await fetch(base + '/button/Capture Calibration/press', { method: 'POST' }).catch(() => {});
   });
   document.getElementById('clear-cal-btn').addEventListener('click', async () => {
     if (!confirm('Clear calibration? You will need to recalibrate.')) return;
-    await fetch(base + '/button/clear_calibration/press', { method: 'POST' }).catch(() => {});
+    await fetch(base + '/button/Clear Calibration/press', { method: 'POST' }).catch(() => {});
   });
 }
 </script>

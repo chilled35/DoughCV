@@ -101,9 +101,9 @@ button.danger:hover { background: rgba(255,23,68,0.1); }
 #camera-wrap {
   background: #000; border-right: 1px solid var(--border);
   display: flex; align-items: center; justify-content: center;
-  min-width: 160px; position: relative;
+  min-width: 320px; position: relative;
 }
-#camera-feed { display: block; image-rendering: pixelated; }
+#camera-feed { display: block; image-rendering: pixelated; width: 320px; height: auto; }
 #camera-overlay {
   position: absolute; bottom: 6px; left: 6px; right: 6px;
   font-size: 0.68rem; color: rgba(255,255,255,0.55); text-align: center;
